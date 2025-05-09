@@ -1,0 +1,21 @@
+name: residualflow
+channels:
+  - defaults
+  - conda-forge
+  - pytorch
+dependencies:
+  - python=3.8
+  - pytorch=1.12
+  - torchvision
+  - cudatoolkit=11.3  # CUDA 버전에 따라 조정
+  - numpy
+  - matplotlib
+  - scipy
+  - scikit-learn
+  - tqdm
+  - jupyterlab
+  - pip
+  - pip:
+      - seaborn
+      - wandb  # 선택사항: 실험 로깅용
+      - imageio

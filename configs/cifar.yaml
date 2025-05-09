@@ -1,0 +1,4 @@
+data:
+  name: cifar
+  batch_size: 128
+  num_workers: 4
