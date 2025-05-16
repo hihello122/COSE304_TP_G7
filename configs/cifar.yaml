@@ -2,3 +2,14 @@ data:
   name: cifar
   batch_size: 128
   num_workers: 4
+
+model:
+  hidden_channels: 64
+  num_blocks: 8
+
+training:
+  epochs: 50
+  lr: 0.001
+  weight_decay: 0.0
+  save_path: "./checkpoints/"
+  input_shape: (3,32,32)  
