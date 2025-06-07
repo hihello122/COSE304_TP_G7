@@ -171,8 +171,52 @@ elif args.data == 'mnist':
         shuffle=False,
         num_workers=args.nworkers,
     )
+# 새로운 데이터 셋에 대해서 하나 추가해서 하기
 
+logger.info('Dataset loaded.')
+logger.info('Creating model.')
 
+input_size = (args.batchsize, im_dim + args.padding, args.imagesize, args.imagesize)
+dataset_size = len(train_loader.dataset)
+
+model = ResidualFlow(
+    input_size,
+    n_blocks=list(map(int, args.nblocks.split('-'))),
+    intermediate_dim=args.idim,
+    factor_out=args.factor_out,
+    quadratic=args.quadratic,
+    init_layer=init_layer,
+    actnorm=args.actnorm,
+    fc_actnorm=args.fc_actnorm,
+    batchnorm=args.batchnorm,
+    dropout=args.dropout,
+    fc=args.fc,
+    coeff=args.coeff,
+    vnorms=args.vnorms,
+    n_lipschitz_iters=args.n_lipschitz_iters,
+    sn_atol=args.sn_tol,
+    sn_rtol=args.sn_tol,
+    n_power_series=args.n_power_series,
+    n_dist=args.n_dist,
+    n_samples=args.n_samples,
+    kernels=args.kernels,
+    activation_fn=args.act,
+    fc_end=args.fc_end,
+    fc_idim=args.fc_idim,
+    n_exact_terms=args.n_exact_terms,
+    preact=args.preact,
+    neumann_grad=args.neumann_grad,
+    grad_in_forward=args.mem_eff,
+    first_resblock=args.first_resblock,
+    learn_p=args.learn_p,
+    classification=args.task in ['classification', 'hybrid'],
+    classification_hdim=args.cdim,
+    n_classes=n_classes,
+    block_type=args.block,
+)
+
+model.to(device)
+ema = utils.ExponentialMovingAverage(model)
 
 # Optimization
 def tensor_in(t, a):
@@ -181,6 +225,8 @@ def tensor_in(t, a):
             return True
     return False
 
+logger.info(model)
+logger.info('EMA: {}'.format(ema))
 
 scheduler = None
 optimizer = optim.Adam(model.parameters(), lr=args.lr, betas=(0.9, 0.99), weight_decay=args.wd)
@@ -234,6 +280,21 @@ firmom_meter = utils.RunningAverageMeter(0.97)
 secmom_meter = utils.RunningAverageMeter(0.97)
 gnorm_meter = utils.RunningAverageMeter(0.97)
 ce_meter = utils.RunningAverageMeter(0.97)
+
+
+def compute_p_grads(model):
+    scales = 0.
+    nlayers = 0
+    for m in model.modules():
+        if isinstance(m, base_layers.InducedNormConv2d) or isinstance(m, base_layers.InducedNormLinear):
+            scales = scales + m.compute_one_iter()
+            nlayers += 1
+    scales.mul(1 / nlayers).backward()
+    for m in model.modules():
+        if isinstance(m, base_layers.InducedNormConv2d) or isinstance(m, base_layers.InducedNormLinear):
+            if m.domain.grad is not None and torch.isnan(m.domain.grad):
+                m.domain.grad = None
+
 
 def train(epoch,model):
 

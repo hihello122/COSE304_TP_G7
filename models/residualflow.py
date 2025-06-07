@@ -2,8 +2,49 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-import resflows.layers as layers
-import resflows.layers.base as base_layers
+from iresblock import iResBlock
+from container import SequentialFlow
+from normalization import MovingBatchNorm1d # 또는 MovingBatchNorm2d
+from elemwise import ZeroMeanTransform
+
+class SimpleResidualFlow(nn.Module):
+    def __init__(self, input_dim, num_blocks=5, hidden_dim=64, lipschitz_const=0.9):
+        super().__init__()
+        
+        # iResBlock 내부에서 사용할 신경망 (nnet) 정의
+        # nnet은 Lipschitz 제약을 위해 get_linear/get_conv2d를 사용할 수도 있습니다.
+        # 여기서는 간단히 nn.Sequential로 구성합니다.
+        def create_nnet(in_dim, out_dim):
+            return nn.Sequential(
+                nn.Linear(in_dim, hidden_dim),
+                nn.ReLU(), # 비선형성
+                nn.Linear(hidden_dim, out_dim),
+            )
+
+        layers = []
+        for _ in range(num_blocks):
+            # 각 iResBlock에 독립적인 nnet 인스턴스 제공
+            nnet_for_block = create_nnet(input_dim, input_dim) 
+            layers.append(
+                iResBlock(
+                    nnet=nnet_for_block,
+                    n_power_series=5, # 파워 시리즈 반복 횟수
+                    lipschitz_const=lipschitz_const # 립시츠 상수 제약
+                )
+            )
+            # 배치 정규화 추가 (선택 사항이지만 학습 안정성에 도움)
+            layers.append(MovingBatchNorm1d(input_dim) if input_dim > 1 else nn.Identity())
+            # ZeroMeanTransform 추가 (선택 사항)
+            layers.append(ZeroMeanTransform())
+
+        self.flow = SequentialFlow(layers)
+
+    def forward(self, x, logpx=None):
+        return self.flow.forward(x, logpx)
+
+    def inverse(self, y, logpy=None):
+        return self.flow.inverse(y, logpy)
+
 
 class ResidualFlow(nn.module):
 
